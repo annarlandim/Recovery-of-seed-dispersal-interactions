@@ -27,6 +27,10 @@ CONTENT
 6) animal_traits.xlsx - table S3 in the Supplementary Material.
 7) plant_traits.xlsx - table S4 in the Supplementary Material.
 
+## Produced from the script:
+
+8) jagsModel.txt - File in .txt-format containing the JAGS model code (produced by the script).
+
 
 ############
 SESSION INFO
