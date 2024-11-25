@@ -8,8 +8,6 @@ library(coda)
 library(lattice)
 load.module("glm")
 
-setwd("C:/Users/arlandim/Dropbox (Senckenberg)/Doutorado/MS2/Analysis/")
-
 #### Functions ####
 
 # Calculate euclidean distance:
