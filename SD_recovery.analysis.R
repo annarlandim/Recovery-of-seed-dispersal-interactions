@@ -8,6 +8,9 @@ library(coda)
 library(lattice)
 load.module("glm")
 
+if (!requireNamespace("here", quietly = TRUE)) install.packages("here")
+library(here)
+
 #### Functions ####
 
 # Calculate euclidean distance:
@@ -37,17 +40,15 @@ alpha_originality <- function(unique_plot, scores){
 #### Data ####
 
 # Interactions:
-int <- read.csv(file = "interactions.csv")
+int <- read.csv(file = here("interactions.csv"))
 int$Plot_ID <- as.factor(int$Plot_ID)
 
 # Traits:
-
-Plants <- read.csv(file = "plants.csv")
+Plants <- read.csv(file = here("plants.csv"))
 Plants$Plot_ID <- as.factor(Plants$Plot_ID)
 
-Animals <- read.csv(file = "animals.csv")
+Animals <- read.csv(file = here("animals.csv"))
 Animals$Plot_ID <- as.factor(Animals$Plot_ID)
-
 
 ## Animals traits:
 body_mass <- Animals %>%
