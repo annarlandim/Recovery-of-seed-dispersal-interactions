@@ -375,7 +375,7 @@ summary(m3)
 
 #### Connectivity Index ####
 
-con <- read.csv(file = here("connectivity"))
+con <- read.csv(file = here("connectivity.csv"))
 
 head(con)
 
@@ -443,7 +443,7 @@ loadings_con$variable <- c("OG 100m", "OG 500m", "OG 1km", "Distance",
 
 #### Recovery analysis ####
 
-alpha_summarised %>% left_join(select(con, Plot_ID, ConIndex), by = "Plot_ID") %>%
+data1 <- alpha_summarised %>% left_join(select(con, Plot_ID, ConIndex), by = "Plot_ID") %>%
   mutate(ConIndex = scale(ConIndex))
 
 data1$type <- factor(ifelse(1:nrow(data1) %in% grep("OG", data1$Plot_ID), "old", "rec"),
@@ -529,7 +529,7 @@ cat(jagsModel, file = "jagsModel.txt")
 
 # -> see definition of tx in the function below
 
-recoveryFun <- function(samples, which = 1, maxt = 1000) {
+recoveryFun <- function(samples, which = 1, conn, maxt = 1000) {
   theta_0 <- do.call(rbind, as.mcmc.list(samples$theta_0))[, paste("theta_0", "[", which, "]", sep = "")]
   theta_inf <- do.call(rbind, as.mcmc.list(samples$theta_inf))[, paste("theta_inf", "[", which, "]", sep = "")]
   alpha <- do.call(rbind, as.mcmc.list(samples$alpha))[, paste("alpha", "[", which, "]", sep = "")]
@@ -554,14 +554,16 @@ recoveryFun <- function(samples, which = 1, maxt = 1000) {
     } else {
       t90_values[x] <- min(tx[which(theta_t < (1.1 * theta_inf[x]))])
     }
+  }
   
   # Return the result as an MCMC object with just the t90 column
-  return(as.mcmc(t90_values))
+  return(t90_values)
 }
+
 # function to set initial values
 
 initFun <- function(data) {
-  oout <- with(data, {
+  out <- with(data, {
     list(
       alpha = runif(nY, 0, 1),
       beta = runif(nY, 0, 1),
@@ -688,7 +690,7 @@ perc_axi <- c(mean(metricList_conn$AlphaInt$Low <= metricList_conn$AlphaAnimals$
 scores <- list(scores_int_hbt, scores_plants_hbt, scores_animals_hbt)
 originalities <- list(alpha_int, alpha_plants, alpha_animals)
 model_samples <- list(alpha, beta, theta_0, theta_inf, t90, qtheta_inf)
-diff_tests <- list(qt90_conn, perc_pxa, perc_pxi, perc_axi, pvalue_beta, perc_p, perc_a, perc_i)
+diff_tests <- list(qt90_conn, perc_pxa, perc_pxi, perc_axi, pvalue_beta)
 
 # saveRDS(scores, "scores.RData")
 # saveRDS(originalities, "originalities.RData")
