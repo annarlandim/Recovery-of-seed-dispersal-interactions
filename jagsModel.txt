@@ -1,0 +1,34 @@
+model{
+    # loop on the three different response variables
+    for (j in 1:nY) {
+      # Loop on observations in old-growth forests to calculate the predicted values
+      for (i in 1:n_old) {
+        # Model Likelihood for old-growth forests
+        Y_old[i, j] ~ dlnorm(log(theta_inf[j]), tau_old[j])
+      }
+      # Loop on observations in secondary forests to calculate the predicted values
+      for (i in 1:n_rec) {							
+        mu_rec[i, j] <-
+          theta_0[j] + 
+          (theta_inf[j] - theta_0[j]) *
+          (1 - exp(-lambda[i, j] * tx[i]))
+        # Model lambda depending on connectivity:
+        lambda[i,j] <- exp(alpha[j] + beta[j] * connectivity[i])
+        # Model Likelihood for secondary forests
+        Y_rec[i, j] ~ dlnorm(log(mu_rec[i, j]), tau_rec[j])
+      }
+      # priors on variance components
+      tau_old[j] ~ dscaled.gamma(s_old[j], 2)
+      sigmaSq_old[j] <- pow(tau_old[j], -1)
+      tau_rec[j] ~ dscaled.gamma(s_rec[j], 2)
+      sigmaSq_rec[j] <- pow(tau_rec[j], -1)
+      # prior on asymptotic attribute value
+      theta_inf[j] ~ dlnorm(0, 1)
+      # prior on initial attribute value
+      theta_0[j] ~ dlnorm(0, 1)
+      # prior on intercept and slope for lambda
+      alpha[j] ~ dnorm(0,1)
+      beta[j] ~ dnorm(0,1)
+
+    }
+  }

@@ -373,15 +373,83 @@ m3 <- lm(AlphaPlants ~ Treatment3,
          data = alpha_summarised)
 summary(m3)
 
+#### Connectivity Index ####
+
+con <- read.csv(file = here("connectivity"))
+
+head(con)
+
+con$Distance_edge <- -con$Distance_edge
+con$Distance <- con$Distance_forest + con$Distance_edge
+
+# hist(exp(con$Forest_1km))
+# hist(exp(con$Forest_500m))
+# hist(log1p(con$Forest_100m))
+# hist((con$Distance+max(abs(con$Distance))))
+# hist(log1p(con$Cacao_1km))
+# hist(log1p(con$Pasture_1km))
+# hist(log1p(con$Cacao_Reg1_1km))
+# hist(log1p(con$Pasture_Reg1_1km))
+# hist(log1p(con$Cacao_Reg2_1km))
+# hist(log1p(con$Pasture_Reg2_1km))
+
+con <- con %>%
+  mutate(
+    t_100m = (Forest_100m),
+    t_500m = exp(Forest_500m),
+    t_1km = exp(Forest_1km),
+    t_dist = (Distance+max(abs(Distance))),
+    t_cacao = log1p(Cacao_1km),
+    t_pasture = log1p(Pasture_1km),
+    t_cacao1 = log1p(Cacao_Reg1_1km),
+    t_pasture1 = log1p(Pasture_Reg1_1km),
+    t_cacao2 = log1p(Cacao_Reg2_1km),
+    t_pasture2 = log1p(Pasture_Reg2_1km),
+    Std_100m = scale((Forest_100m)),
+    Std_500m = scale(exp(Forest_500m)),
+    Std_1km = scale(exp(Forest_1km)),
+    Std_dist = scale((Distance+max(abs(Distance)))),
+    Std_cacao = scale(log1p(Cacao_1km)),
+    Std_pasture = scale(log1p(Pasture_1km)),
+    Std_cacao1 = scale(log1p(Cacao_Reg1_1km)),
+    Std_pasture1 = scale(log1p(Pasture_Reg1_1km)),
+    Std_cacao2 = scale(log1p(Cacao_Reg2_1km)),
+    Std_pasture2 = scale(log1p(Pasture_Reg2_1km)),
+  )
+
+# Number of components to be used:
+# cor <- cor.smooth(con[, c("t_1km", "t_500m", "t_100m", "t_dist", "t_cacao", "t_pasture", "t_cacao1", "t_pasture1", "t_cacao2", "t_pasture2")])
+# eigen <- eigen(cor)
+# permuted <- matrix(nrow=1000, ncol=10)
+# for(i in 1:1000){
+#   permuted_data <- apply(con[, c("t_1km", "t_500m", "t_100m", "t_dist", "t_cacao", "t_pasture", "t_cacao1", "t_pasture1", "t_cacao2", "t_pasture2")],2,sample)
+#   permuted[i,] <- eigen(cor.smooth(permuted_data))$values
+# }
+# thresholds <- apply(permuted, 2, function(x) quantile(x, 0.95))
+# eigen$values
+# thresholds
+
+con_pca <- principal(con[, c("Std_100m", "Std_500m", "Std_1km", "Std_dist", "Std_cacao", "Std_pasture", "Std_cacao1", "Std_pasture1", "Std_cacao2", "Std_pasture2")], nfactor = 1, scores = TRUE, rotate = "varimax", covar = FALSE, missing = TRUE, use = "pairwise")
+
+con_index <- as.data.frame(con_pca$scores*-1)
+con_index$Plot_ID <- con$Plot_ID
+con <- con %>% left_join(select(con_index, ConIndex = PC1, Plot_ID), by = "Plot_ID")
+
+loadings_con <- as.data.frame(con_pca$loadings[,1])
+loadings_con$variable <- c("OG 100m", "OG 500m", "OG 1km", "Distance", 
+                           "Cacao", "Pasture", "Cacao Early", "Pasture Early", 
+                           "Cacao Late", "Pasture Late")
+
 
 #### Recovery analysis ####
 
-data1 <- alpha_summarised
+alpha_summarised %>% left_join(select(con, Plot_ID, ConIndex), by = "Plot_ID") %>%
+  mutate(ConIndex = scale(ConIndex))
 
 data1$type <- factor(ifelse(1:nrow(data1) %in% grep("OG", data1$Plot_ID), "old", "rec"),
                      levels = c("old", "rec"))
 
-data1Sub <- subset(data1, select = c(type, RegTime, AlphaPlants, AlphaAnimals, AlphaInt))
+data1Sub <- subset(data1, select = c(type, RegTime, ConIndex, AlphaPlants, AlphaAnimals, AlphaInt))
 table(data1Sub$type)
 str(data1Sub)
 
@@ -408,6 +476,7 @@ jagsData <-
       n_rec = nrow(Y_rec),
       s_rec = apply(Y_rec, 2, FUN = function(x) sd(log(x), na.rm = TRUE)),
       tx = RegTime[type == "rec"],
+      connectivity = data1Sub$ConIndex[data1Sub$type == "rec"],
       nY = ncol(Y)
     )
     return(out)
@@ -429,7 +498,9 @@ jagsModel <-
         mu_rec[i, j] <-
           theta_0[j] + 
           (theta_inf[j] - theta_0[j]) *
-          (1 - exp(-lambda[j] * tx[i]))
+          (1 - exp(-lambda[i, j] * tx[i]))
+        # Model lambda depending on connectivity:
+        lambda[i,j] <- exp(alpha[j] + beta[j] * connectivity[i])
         # Model Likelihood for secondary forests
         Y_rec[i, j] ~ dlnorm(log(mu_rec[i, j]), tau_rec[j])
       }
@@ -438,12 +509,14 @@ jagsModel <-
       sigmaSq_old[j] <- pow(tau_old[j], -1)
       tau_rec[j] ~ dscaled.gamma(s_rec[j], 2)
       sigmaSq_rec[j] <- pow(tau_rec[j], -1)
-      # prior on recovery rate
-      lambda[j] ~ dlnorm(0, 1)
       # prior on asymptotic attribute value
       theta_inf[j] ~ dlnorm(0, 1)
       # prior on initial attribute value
       theta_0[j] ~ dlnorm(0, 1)
+      # prior on intercept and slope for lambda
+      alpha[j] ~ dnorm(0,1)
+      beta[j] ~ dnorm(0,1)
+
     }
   }"
 cat(jagsModel, file = "jagsModel.txt")
@@ -459,11 +532,18 @@ cat(jagsModel, file = "jagsModel.txt")
 recoveryFun <- function(samples, which = 1, maxt = 1000) {
   theta_0 <- do.call(rbind, as.mcmc.list(samples$theta_0))[, paste("theta_0", "[", which, "]", sep = "")]
   theta_inf <- do.call(rbind, as.mcmc.list(samples$theta_inf))[, paste("theta_inf", "[", which, "]", sep = "")]
-  lambda <- do.call(rbind, as.mcmc.list(samples$lambda))[, paste("lambda", "[", which, "]", sep = "")]
+  alpha <- do.call(rbind, as.mcmc.list(samples$alpha))[, paste("alpha", "[", which, "]", sep = "")]
+  beta  <- do.call(rbind, as.mcmc.list(samples$beta))[, paste("beta", "[", which, "]", sep = "")]
+  
+  # Calculate lambda based on connectivity
+  lambda <- exp(alpha + beta * conn)
+  
   tx <- seq(1, maxt, 0.1)
   
   # Initialize vector to store t90 for each sample
   t90_values <- numeric(length(theta_0))
+  
+  failed_indices <- c()
   
   # Loop through the samples to compute t90 for each one
   for (x in 1:length(theta_0)) {
@@ -474,7 +554,6 @@ recoveryFun <- function(samples, which = 1, maxt = 1000) {
     } else {
       t90_values[x] <- min(tx[which(theta_t < (1.1 * theta_inf[x]))])
     }
-  }
   
   # Return the result as an MCMC object with just the t90 column
   return(as.mcmc(t90_values))
@@ -482,9 +561,10 @@ recoveryFun <- function(samples, which = 1, maxt = 1000) {
 # function to set initial values
 
 initFun <- function(data) {
-  out <- with(data, {
+  oout <- with(data, {
     list(
-      lambda = runif(nY, 0, 1),
+      alpha = runif(nY, 0, 1),
+      beta = runif(nY, 0, 1),
       theta_inf = runif(nY, 0, 1),
       theta_0 = runif(nY, 0, 1),
       tau_old = runif(nY, 0, 1),
@@ -505,16 +585,20 @@ init1 <- jags.model("jagsModel.txt",
 # sample from posterior distribution
 
 #update(init1, n.iter = 1e4)
-monitor1 <- c("theta_0", "theta_inf", "lambda", "sigmaSq_old", "sigmaSq_rec")
+monitor1 <- c("theta_0", "theta_inf", "alpha", "beta", "sigmaSq_old", "sigmaSq_rec")
 samp1 <- jags.samples(init1, variable.names = monitor1, n.iter = 2e5, thin = 2e2)
 ## thin reduces autocorr between consecutive samples in MCMC
 ## in that way, although we run 4e4 iterations, we only save 4e4 / 1e2 * 5 samples
 
 # diagnostics
 
-gelman.diag(as.mcmc.list(log(samp1$lambda)))
-effectiveSize(as.mcmc.list(log(samp1$lambda)))
-autocorr.diag(as.mcmc.list(log(samp1$lambda)))
+gelman.diag(as.mcmc.list((samp1$alpha)))
+effectiveSize(as.mcmc.list((samp1$alpha)))
+autocorr.diag(as.mcmc.list((samp1$alpha)))
+
+gelman.diag(as.mcmc.list((samp1$beta)))
+effectiveSize(as.mcmc.list((samp1$beta)))
+autocorr.diag(as.mcmc.list((samp1$beta)))
 
 gelman.diag(as.mcmc.list(log(samp1$theta_0)))
 effectiveSize(as.mcmc.list(log(samp1$theta_0)))
@@ -535,7 +619,8 @@ autocorr.diag(as.mcmc.list(log(samp1$sigmaSq_rec)))
 # plot
 ## probability distributions
 
-densityplot(as.mcmc.list(samp1$lambda), scale = list(x = list(log = 10)))
+densityplot(as.mcmc.list(samp1$alpha))
+densityplot(as.mcmc.list(samp1$beta))
 densityplot(as.mcmc.list(samp1$theta_0), scale = list(x = list(log = 10)))
 densityplot(as.mcmc.list(samp1$theta_inf), scale = list(x = list(log = 10)))
 densityplot(as.mcmc.list(samp1$sigmaSq_old), scale = list(x = list(log = 10)))
@@ -543,43 +628,73 @@ densityplot(as.mcmc.list(samp1$sigmaSq_rec), scale = list(x = list(log = 10)))
 
 # extracting posterior samples for metrics
 
-metricList <- lapply(1:3, FUN = function(x) recoveryFun(samp1, which = x, maxt = 1000))
-names(metricList) <- colnames(jagsData$Y_old)
+conn_values <- c(
+  Low      = summary(jagsData$connectivity)[[2]],
+  Medium   = summary(jagsData$connectivity)[[4]],
+  High     = summary(jagsData$connectivity)[[5]]
+)
+
+metricList_conn <- lapply(1:3, function(metric) {
+  lapply(conn_values, function(conn) recoveryFun(samp1, which = metric, conn = conn))
+})
+names(metricList_conn) <- colnames(jagsData$Y_old)
 
 # extract variables for plotting
 
 theta_inf <- do.call(rbind, as.mcmc.list(samp1$theta_inf))
 theta_0 <- do.call(rbind, as.mcmc.list(samp1$theta_0))
-lambda <- do.call(rbind, as.mcmc.list(samp1$lambda))
-t90 <- do.call(cbind, metricList)
+alpha <- do.call(rbind, as.mcmc.list(samp1$alpha))
+beta <- do.call(rbind, as.mcmc.list(samp1$beta))
+t90 <- do.call(cbind, lapply(1:3, function(metric) {
+  sapply(1:length(names(metricList_conn[[1]])), function(i) {
+    as.numeric(metricList_conn[[metric]][[i]])
+  })
+}))
 sigmaSq_rec <- do.call(rbind, as.mcmc.list(samp1$sigmaSq_rec))
 sigmaSq_old <- do.call(rbind, as.mcmc.list(samp1$sigmaSq_old))
 
-qt90 <-  sapply(metricList, FUN = function(x) {
-  quantile(as.numeric(x), prob = c(0.025, 0.25, 0.5, 0.75, 0.975))
+qt90_conn <- lapply(metricList_conn, function(metric_data) {
+  lapply(metric_data, function(x) {
+    quantile(as.numeric(x), probs = c(0.05, 0.25, 0.5, 0.75, 0.95))
+  })
 })
-qtheta_0 <- apply(theta_0, 2, FUN = quantile, prob = c(0.025, 0.25, 0.5, 0.75, 0.975))
-qtheta_inf <- apply(theta_inf, 2, FUN = quantile, prob = c(0.025, 0.25, 0.5, 0.75, 0.975))
-qlambda <- apply(lambda, 2, FUN = quantile, prob = c(0.025, 0.25, 0.5, 0.75, 0.975))
+colnames(t90) <- as.vector(outer(names(metricList_conn), names(metricList_conn[[1]]), paste, sep = "_"))
+qtheta_0 <- apply(theta_0, 2, FUN = quantile, prob = c(0.05, 0.25, 0.5, 0.75, 0.95))
+qtheta_inf <- apply(theta_inf, 2, FUN = quantile, prob = c(0.05, 0.25, 0.5, 0.75, 0.95))
+qalpha <- apply(alpha, 2, FUN = quantile, prob = c(0.05, 0.25, 0.5, 0.75, 0.95))
+qbeta <- apply(beta, 2, FUN = quantile, prob = c(0.05, 0.25, 0.5, 0.75, 0.95))
+qsigmarec <- apply(sigmaSq_rec, 2, FUN = quantile, prob = c(0.05, 0.25, 0.5, 0.75, 0.95))
+qsigmaold <- apply(sigmaSq_old, 2, FUN = quantile, prob = c(0.05, 0.25, 0.5, 0.75, 0.95))
 
-qsigmarec <- apply(sigmaSq_rec, 2, FUN = quantile, prob = c(0.025, 0.25, 0.5, 0.75, 0.975))
-qsigmaold <- apply(sigmaSq_old, 2, FUN = quantile, prob = c(0.025, 0.25, 0.5, 0.75, 0.975))
+pvalue_beta <- c(mean(sign(beta[,1]) == sign(median(beta[,1]))),
+                 mean(sign(beta[,2]) == sign(median(beta[,2]))),
+                 mean(sign(beta[,3]) == sign(median(beta[,3]))))
 
 # plants vs. animals
-perc_pxa <- 1 - mean(metricList$AlphaPlants > metricList$AlphaAnimals) 
+perc_pxa <- c(mean(metricList_conn$AlphaAnimals$Low >= metricList_conn$AlphaPlants$Low),
+              mean(metricList_conn$AlphaAnimals$Medium >= metricList_conn$AlphaPlants$Medium),
+              mean(metricList_conn$AlphaAnimals$High >= metricList_conn$AlphaPlants$High)) 
 # plants vs. interactions
-perc_pxi <- 1 - mean(metricList$AlphaPlants > metricList$AlphaInt)
+perc_pxi <- c(mean(metricList_conn$AlphaInt$Low >= metricList_conn$AlphaPlants$Low),
+              mean(metricList_conn$AlphaInt$Medium >= metricList_conn$AlphaPlants$Medium),
+              mean(metricList_conn$AlphaInt$High >= metricList_conn$AlphaPlants$High))
 # animals vs. interactions
-perc_axi <- 1 - mean(metricList$AlphaAnimals > metricList$AlphaInt)
+perc_axi <- c(mean(metricList_conn$AlphaInt$Low <= metricList_conn$AlphaAnimals$Low),
+              mean(metricList_conn$AlphaInt$Medium <= metricList_conn$AlphaAnimals$Medium),
+              mean(metricList_conn$AlphaInt$High <= metricList_conn$AlphaAnimals$High))
 
 #### Save data ####
 
-# scores <- list(scores_int_hbt, scores_plants_hbt, scores_animals_hbt)
-# originalities <- list(alpha_int, alpha_plants, alpha_animals)
-# model_samples <- list(lambda, theta_0, theta_inf, t90)
-# diff_tests <- list(qt90, perc_pxa, perc_pxi, perc_axi, qtheta_inf)
-# 
+scores <- list(scores_int_hbt, scores_plants_hbt, scores_animals_hbt)
+originalities <- list(alpha_int, alpha_plants, alpha_animals)
+model_samples <- list(alpha, beta, theta_0, theta_inf, t90, qtheta_inf)
+diff_tests <- list(qt90_conn, perc_pxa, perc_pxi, perc_axi, pvalue_beta, perc_p, perc_a, perc_i)
+
 # saveRDS(scores, "scores.RData")
+# saveRDS(originalities, "originalities.RData")
+# saveRDS(data1, "analysis_data.RData")
+# saveRDS(model_samples, "model_samples.RData")
+# saveRDS(diff_tests, "groups_diffs.RData")# saveRDS(scores, "scores.RData")
 # saveRDS(originalities, "originalities.RData")
 # saveRDS(data1, "analysis_data.RData")
 # saveRDS(model_samples, "model_samples.RData")
