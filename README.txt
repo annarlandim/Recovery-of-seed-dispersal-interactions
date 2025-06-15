@@ -57,7 +57,15 @@ other attached packages:
 [1] lattice_0.21-8 rjags_4-15     coda_0.19-4.1  ggplot2_3.4.4  tidyr_1.3.1    dplyr_1.1.4    psych_2.4.1    here_1.0.1    
 
 loaded via a namespace (and not attached):
- [1] vctrs_0.6.5       nlme_3.1-162      cli_3.6.1         rlang_1.1.1       purrr_1.0.2       generics_0.1.3    glue_1.6.2       
- [8] colorspace_2.1-0  rprojroot_2.0.4   scales_1.3.0      fansi_1.0.6       grid_4.3.1        munsell_0.5.0     tibble_3.2.1     
-[15] lifecycle_1.0.4   compiler_4.3.1    pkgconfig_2.0.3   rstudioapi_0.15.0 R6_2.5.1          tidyselect_1.2.0  utf8_1.2.4       
-[22] pillar_1.9.0      mnormt_2.1.1      parallel_4.3.1    magrittr_2.0.3    withr_3.0.0       tools_4.3.1       gtable_0.3.4     
+[1] miniUI_0.1.1.1    dplyr_1.1.4       compiler_4.3.1    promises_1.2.1   
+ [5] tidyselect_1.2.0  Rcpp_1.0.11       stringr_1.5.1     later_1.3.2      
+ [9] fastmap_1.1.1     mime_0.12         R6_2.5.1          generics_0.1.3   
+[13] htmlwidgets_1.6.4 tibble_3.2.1      profvis_0.3.8     shiny_1.8.0      
+[17] pillar_1.9.0      rlang_1.1.1       utf8_1.2.4        cachem_1.0.8     
+[21] stringi_1.7.12    httpuv_1.6.13     fs_1.6.3          pkgload_1.3.4    
+[25] memoise_2.0.1     cli_3.6.1         magrittr_2.0.3    digest_0.6.33    
+[29] rstudioapi_0.15.0 xtable_1.8-4      remotes_2.4.2.1   devtools_2.4.5   
+[33] lifecycle_1.0.4   vctrs_0.6.5       glue_1.6.2        urlchecker_1.0.1 
+[37] sessioninfo_1.2.2 pkgbuild_1.4.3    fansi_1.0.6       purrr_1.0.2      
+[41] usethis_3.1.0     tools_4.3.1       pkgconfig_2.0.3   ellipsis_0.3.2   
+[45] htmltools_0.5.7     
